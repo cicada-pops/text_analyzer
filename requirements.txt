@@ -3,7 +3,7 @@ DAWG-Python==0.7.2
 docopt==0.6.2
 joblib==1.4.2
 nltk==3.9.1
-numpy==2.2.2
+numpy==2.0.2
 pymorphy3==2.0.2
 pymorphy3-dicts-ru==2.4.417150.4580142
 rank-bm25==0.2.2
