@@ -1,6 +1,22 @@
-
 import re
 from collections import defaultdict
+import os
+
+import nltk
+
+nltk_data_path = os.path.expanduser('~/nltk_data')
+flag_file = os.path.join(nltk_data_path, '.resources_downloaded')
+
+if not os.path.exists(flag_file):
+    for resource in ['punkt', 'stopwords', 'punkt_tab']:
+        try:
+            nltk.data.find(f'tokenizers/{resource}')
+        except LookupError:
+            nltk.download(resource)
+    
+    os.makedirs(nltk_data_path, exist_ok=True)
+    with open(flag_file, 'w') as f:
+        f.write('NLTK resources downloaded')
 
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, PunktSentenceTokenizer
@@ -8,9 +24,11 @@ from typing import Dict, List, Any
 
 import pymorphy3
 
-from ..lib.cefr_dictionary import a1, a2, b1, b2, c1, c2, dictionary_500
-from ..lib.utils import format_time
-from ..lib.constants import CEFR_READING_SPEED, POS_MAPPING
+from cefr_dictionary import a1, a2, b1, b2, c1, c2, dictionary_500
+from utils import format_time
+from constants import CEFR_READING_SPEED, POS_MAPPING
+
+
 
 
 class TextAnalyzer:
@@ -322,31 +340,31 @@ class TextAnalyzer:
         """
         stats = self.get_stats()
         lines = []
-        lines.append(f"Уровень текста в системе ACTFL -\t{stats['actfl_level']}")
-        lines.append(f"Знаков с пробелами -\t{stats['character_count']}")
-        lines.append(f"Предложений -\t{stats['sentence_count']}")
-        lines.append(f"Слов -\t{stats['word_count']}")
-        lines.append(f"Уникальных слов -\t{stats['unique_word_count']}")
-        lines.append(f"Лексическое разнообразие -\t{stats['lexical_diversity']}")
+        lines.append(f"Уровень текста в системе ACTFL - {stats['actfl_level']}")
+        lines.append(f"Знаков с пробелами - {stats['character_count']}")
+        lines.append(f"Предложений - {stats['sentence_count']}")
+        lines.append(f"Слов - {stats['word_count']}")
+        lines.append(f"Уникальных слов - {stats['unique_word_count']}")
+        lines.append(f"Лексическое разнообразие - {stats['lexical_diversity']}")
         lines.append("")
-        lines.append("Ключевые слова:\t" + ", ".join(stats["key_words"]))
+        lines.append("Ключевые слова: " + ", ".join(stats["key_words"]))
         lines.append("")
-        lines.append("Самые полезные слова:\t" + ", ".join(stats["most_useful_words"]))
+        lines.append("Самые полезные слова: " + ", ".join(stats["most_useful_words"]))
         lines.append("")
         for level, data in stats["lexical_lists"].items():
             if level == "dictionary_500":
-                lines.append(f"Частотный словарь {level} покрывает\t{data['coverage']}%")
-                lines.append("Редкие слова:\t" + ", ".join(data.get("rare_words", [])))
+                lines.append(f"Частотный словарь {level} покрывает {data['coverage']}%")
+                lines.append("Редкие слова: " + ", ".join(data.get("rare_words", [])))
             else:
-                lines.append(f"Лексический словарь {level} покрывает\t{data['coverage']}%")
-                lines.append(f"Не входит в лексический словарь {level}:\t" + ", ".join(data.get("not_included", [])))
+                lines.append(f"Лексический словарь {level} покрывает {data['coverage']}%")
+                lines.append(f"Не входит в лексический словарь {level}: " + ", ".join(data.get("not_included", [])))
         return "\n".join(lines)
 
 
 if __name__ == "__main__":
-    sample_text = (
-        "Компания Microsoft объявила о создании первого в мире квантового чипа Majorana 1 на топологических проводниках."
-        "В частности, топопроводник способен создавать новое состояние материи, так что в недалеком будущем появится квантовый компьютер с миллионом кубитов."
-    )
-    analyzer = TextAnalyzer(sample_text)
+    import sys
+    
+    input_text = sys.stdin.read().strip()
+    
+    analyzer = TextAnalyzer(input_text)
     print(analyzer.get_full_analysis_text())

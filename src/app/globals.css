@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 220 13% 95%;
+    --foreground: 206 31% 26%;
+    
+    --muted: 220 13% 90%;
+    --muted-foreground: 206 31% 26%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 206 31% 26%;
+    
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+  }
+}
