@@ -24,7 +24,7 @@ from typing import Dict, List, Any
 
 import pymorphy3
 
-from cefr_dictionary import a1, a2, b1, b2, c1, c2, dictionary_500
+from cefr_dictionary import a1, a2, b1, b2, c1, c2
 from utils import format_time
 from constants import CEFR_READING_SPEED, POS_MAPPING
 
@@ -278,88 +278,43 @@ class TextAnalyzer:
         useful_words = sorted(list(text_unique - basic_vocab))
         return useful_words
 
-    def get_stats(self) -> Dict[str, Any]:
-        """
-        Возвращает детализированную статистику по тексту, объединяющую базовые и новые метрики.
-
-        :return: Словарь со следующими ключами:
-            - actfl_level: уровень текста по системе ACTFL.
-            - character_count: общее количество символов.
-            - sentence_count: количество предложений.
-            - word_count: общее количество слов.
-            - unique_word_count: количество уникальных слов.
-            - lexical_diversity: лексическое разнообразие.
-            - key_words: список ключевых слов.
-            - most_useful_words: список наиболее полезных (расширенных) слов.
-            - lexical_lists: результаты анализа по лексическим словарям.
-            - lix_index: индекс читаемости LIX.
-            - reading_time: время чтения по уровням CEFR.
-            - pos_tags: статистика по частям речи.
-        """
-        return {
-            "actfl_level": self.determine_actfl_level(),
-            "character_count": self.character_count,
-            "sentence_count": self.sentence_count,
-            "word_count": self.word_count,
-            "unique_word_count": self.get_unique_word_count(),
-            "lexical_diversity": self.get_lexical_diversity(),
-            "key_words": self.get_key_words(),
-            "most_useful_words": self.get_most_useful_words(),
-            "lexical_lists": self.analyze_lexical_lists(),
-            "lix_index": self.calculate_lix(),
-            "reading_time": self.calculate_reading_time(),
-            "pos_tags": self.count_pos_tags(),
-        }
-
-    def get_full_analysis_text(self) -> str:
+     def get_full_analysis_text(self) -> str:
         """
         Форматирует итоговый анализ текста в виде многострочной строки.
 
-        Пример вывода:
-            Уровень текста в системе ACTFL - Advanced Mid
-            Знаков с пробелами - 288
-            Предложений - 1
-            Слов - 36
-            Уникальных слов - 26
-            Лексическое разнообразие - 0.72
-
-            Ключевые слова:
-            текст, рассчитать, слово
-
-            Самые полезные слова:
-            разнообразие, лексический, сложность, коэффициент, ключевой
-
-            Лексический словарь A1 покрывает 44%
-            Не входит в лексический словарь A1: текстометр, определять, ...
-            ...
-            Частотный словарь dictionary_500 покрывает 0%
-            Редкие слова:
-            ...
-
         :return: Отформатированная строка с детальным анализом текста.
         """
-        stats = self.get_stats()
-        lines = []
-        lines.append(f"Уровень текста в системе ACTFL - {stats['actfl_level']}")
-        lines.append(f"Знаков с пробелами - {stats['character_count']}")
-        lines.append(f"Предложений - {stats['sentence_count']}")
-        lines.append(f"Слов - {stats['word_count']}")
-        lines.append(f"Уникальных слов - {stats['unique_word_count']}")
-        lines.append(f"Лексическое разнообразие - {stats['lexical_diversity']}")
-        lines.append("")
-        lines.append("Ключевые слова: " + ", ".join(stats["key_words"]))
-        lines.append("")
-        lines.append("Самые полезные слова: " + ", ".join(stats["most_useful_words"]))
-        lines.append("")
-        for level, data in stats["lexical_lists"].items():
-            if level == "dictionary_500":
-                lines.append(f"Частотный словарь {level} покрывает {data['coverage']}%")
-                lines.append("Редкие слова: " + ", ".join(data.get("rare_words", [])))
-            else:
-                lines.append(f"Лексический словарь {level} покрывает {data['coverage']}%")
-                lines.append(f"Не входит в лексический словарь {level}: " + ", ".join(data.get("not_included", [])))
+        
+        lines = [
+            f"Уровень текста в системе ACTFL - {self.determine_actfl_level()}",
+            f"Знаков с пробелами - {self.character_count}",
+            f"Предложений - {self.sentence_count}",
+            f"Слов - {self.word_count}",
+            f"Уникальных слов - {self.get_unique_word_count()}",
+            f"Лексическое разнообразие - {self.get_lexical_diversity()}"
+        ]
+        
+        reading_times = self.calculate_reading_time()
+        for cefr_level, times in reading_times.items():
+            lines.append(f"Изучающее чтение: {times['study_time']}")
+            lines.append(f"Просмотровое чтение: {times['skim_time']}")
+        
+        key_words = self.get_key_words()
+        if key_words:
+            lines.append("\nКлючевые слова:\n" + ", ".join(key_words))
+        
+        useful_words = self.get_most_useful_words()
+        if useful_words:
+            lines.append("\nСамые полезные слова:\n" + ", ".join(useful_words))
+        
+        lexical_lists = self.analyze_lexical_lists()
+        for level, data in lexical_lists.items():
+            lines.append(f"\nЛексический словарь {level} покрывает {data['coverage']}%")
+            not_included = data.get("not_included", [])
+            if not_included:
+                lines.append(f"Не входит в лексический словарь {level}: " + ", ".join(not_included[:10]) + ("..." if len(not_included) > 10 else ""))
+        
         return "\n".join(lines)
-
 
 if __name__ == "__main__":
     import sys
