@@ -28,7 +28,7 @@ import pymorphy3
 
 from cefr_dictionary import a1, a2, b1, b2, c1, c2
 from utils import format_time
-from constants import CEFR_READING_SPEED, POS_MAPPING
+from constants import CEFR_READING_SPEED, POS_MAPPING, ACTFL_TO_CEFR
 
 
 class TextAnalyzer:
@@ -128,25 +128,27 @@ class TextAnalyzer:
             if word not in self.stop_words
         ]
 
-    def calculate_reading_time(self) -> Dict[str, Dict[str, str]]:
+    def calculate_reading_time(self, cefr_level: str) -> Dict[str, str]:
         """
-        Рассчитывает время чтения текста для всех уровней CEFR в минутах и секундах.
+        Рассчитывает время чтения текста для заданного уровня CEFR в минутах и секундах.
 
-        :return: Словарь, где ключи — уровни CEFR, а значения — словари с параметрами study_time и skim_time.
+        :param cefr_level: Уровень CEFR, для которого требуется рассчитать время чтения.
+        :return: Словарь с параметрами study_time и skim_time для указанного уровня.
         """
-        reading_times = {}
-        for cefr_level, speeds in CEFR_READING_SPEED.items():
-            study_speed = speeds["study"]
-            skim_speed = speeds["skim"]
+        if cefr_level not in CEFR_READING_SPEED:
+            raise ValueError(f"Неизвестный уровень CEFR: {cefr_level}")
 
-            study_time = self.word_count / study_speed
-            skim_time = self.word_count / skim_speed
+        speeds = CEFR_READING_SPEED[cefr_level]
+        study_speed = speeds["study"]
+        skim_speed = speeds["skim"]
 
-            reading_times[cefr_level] = {
-                "study_time": format_time(study_time),
-                "skim_time": format_time(skim_time),
-            }
-        return reading_times
+        study_time = max(self.word_count / study_speed, 1)
+        skim_time = max(self.word_count / skim_speed, 1)
+
+        return {
+            "study_time": format_time(study_time),
+            "skim_time": format_time(skim_time),
+        }
 
     def count_pos_tags(self) -> Dict[str, str]:
         """
@@ -263,11 +265,21 @@ class TextAnalyzer:
             
             if level in valid_levels:
                 return level
-            return "Intermediate Mid"  # значение по умолчанию
+            return "Intermediate Mid"
             
         except Exception as e:
             print(f"Error in ACTFL determination: {e}")
-            return "Intermediate Mid"  # значение по умолчанию в случае ошибки
+            return "Intermediate Mid" 
+
+    def actfl_to_cefr(actfl_level: str) -> str:
+        """
+        Переводит уровень сложности по системе ACTFL в соответствующий уровень по системе CEFR.
+        
+        :param actfl_level: Уровень ACTFL.
+        :return: Соответствующий уровень CEFR
+        """
+
+        return ACTFL_TO_CEFR.get(actfl_level, None)
 
     def get_key_words(self) -> List[str]:
         """
@@ -315,21 +327,22 @@ class TextAnalyzer:
 
         :return: Отформатированная строка с детальным анализом текста.
         """
+        actfl_level = self.determine_actfl_level()
+        cefr_level = self.actfl_to_cefr(actfl_level)
+        reading_times = self.calculate_reading_time()
         
         lines = [
-            f"<b>Уровень текста в системе ACTFL</b> - {self.determine_actfl_level()}",
+            f"<b>Уровень текста в системе ACTFL</b> - {actfl_level}",
+            f"<b>Уровень текста в системе CEFR</b> - {cefr_level}",
             f"<b>Знаков с пробелами</b> - {self.character_count}",
             f"<b>Предложений</b> - {self.sentence_count}",
             f"<b>Слов</b> - {self.word_count}",
             f"<b>Уникальных слов</b> - {self.get_unique_word_count()}",
-            f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}\n"
-        ]
-
-        reading_times = self.calculate_reading_time()
-        for cefr_level, times in reading_times.items():
-            lines.append(f"<b>Изучающее чтение уровень {cefr_level}</b>: {times['study_time']}")
-            lines.append(f"<b>Просмотровое чтение уровень {cefr_level}</b>: {times['skim_time']}")
-
+            f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}\n",
+            f"<b>Изучающее чтение</b>: {reading_times['study_time']}",
+            f"<b>Просмотровое чтение</b>: {reading_times['skim_time']}",
+            ]
+        
         key_words = self.get_key_words()
         if key_words:
             lines.append("\n<b>Ключевые слова</b>:\n" + ", ".join(key_words))

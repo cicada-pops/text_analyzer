@@ -13,3 +13,12 @@ POS_MAPPING = {
             "NUMR": "числительные", "GRND": "деепричастия", "PRTF": "причастия",
             "PRTS": "причастия"
         }
+
+ACTFL_TO_CEFR = {
+            "Advanced Mid": "C1",
+            "Advanced Low": "B2",
+            "Intermediate High": "B2",
+            "Intermediate Mid": "B1",
+            "Novice High": "A2",
+            "Below Novice": "A1"
+        }
