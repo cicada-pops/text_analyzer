@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 import os
-
+from freq_dictionary import freq_dict
 import nltk
 
 nltk_data_path = os.path.expanduser('~/nltk_data')
@@ -13,7 +13,7 @@ if not os.path.exists(flag_file):
             nltk.data.find(f'tokenizers/{resource}')
         except LookupError:
             nltk.download(resource)
-    
+
     os.makedirs(nltk_data_path, exist_ok=True)
     with open(flag_file, 'w') as f:
         f.write('NLTK resources downloaded')
@@ -29,52 +29,49 @@ from utils import format_time
 from constants import CEFR_READING_SPEED, POS_MAPPING
 
 
-
-
 class TextAnalyzer:
     """
-    Класс для вычисления основных метрик текста и его лексического анализа.
+    Класс для выполнения лексического анализа и расчёта метрик текста.
+
+    Основные возможности:
+      - Токенизация текста на слова и предложения.
+      - Лемматизация с использованием pymorphy3 и фильтрация стоп-слов.
+      - Расчёт статистических показателей (количество слов, символов, предложений, уникальных слов, индекс читаемости LIX).
+      - Анализ лексического покрытия по словарям уровней CEFR (A1, A2, B1, B2, C1, C2) и по частотному словарю (freq_dict).
+      - Определение уровня текста по системе ACTFL на основе покрытия лексических списков.
+      - Выделение ключевых слов на основе TF/IDF: вычисляется отношение числа появлений слова в тексте к его частоте по Национальному корпусу (с корректирующим коэффициентом).
+      - Выделение «полезных слов» – тех, которые отсутствуют в базовых словарях (A1 ∪ A2) – с сортировкой по TF/IDF.
 
     Атрибуты:
-        text (str): Исходный текст, приведённый к нижнему регистру и очищенный от лишних пробелов.
-        morph (pymorphy3.MorphAnalyzer): Морфологический анализатор для русского языка.
-        tokenizer (PunktSentenceTokenizer): Токенизатор предложений для разделения текста на предложения.
-        stop_words (set[str]): Набор стоп-слов для фильтрации.
-        words (List[str]): Список токенизированных слов без знаков препинания (только русские буквы).
-        normalized_words (List[str]): Лемматизированный список слов, исключая стоп-слова.
-        sentences (List[str]): Список предложений, полученных из текста.
-        word_count (int): Общее количество слов в тексте.
-        character_count (int): Общее количество символов в тексте (включая пробелы).
-        sentence_count (int): Количество предложений в тексте.
-        long_word_count (int): Количество слов длиннее 6 символов.
-
-    Новые метрики:
-        - Количество уникальных слов и лексическое разнообразие.
-        - Анализ покрытия текста по лексическим словарям (A1, A2, B1, B2, C1, C2, а также частотный словарь dictionary_500).
-        - Определение уровня текста по системе ACTFL.
-        - Выделение ключевых и самых полезных слов.
+      text (str): Исходный текст в нижнем регистре.
+      morph (pymorphy3.MorphAnalyzer): Морфологический анализатор для русского языка.
+      tokenizer (PunktSentenceTokenizer): Токенизатор предложений.
+      stop_words (set[str]): Множество стоп-слов.
+      words (List[str]): Токенизированные слова.
+      normalized_words (List[str]): Лемматизированные слова (без стоп-слов).
+      sentences (List[str]): Список предложений.
+      word_count (int): Общее число слов.
+      character_count (int): Количество символов (с пробелами).
+      sentence_count (int): Количество предложений.
+      long_word_count (int): Число слов длиннее 6 символов.
 
     Методы:
-        tokenize_words: Токенизирует текст на слова, исключая знаки препинания.
-        tokenize_sentences: Токенизирует текст на предложения.
-        lemmatize_words: Лемматизирует слова из текста с исключением стоп-слов.
-        calculate_reading_time: Рассчитывает время чтения для уровней CEFR.
-        count_pos_tags: Подсчитывает части речи в тексте.
-        calculate_lix: Рассчитывает индекс читаемости LIX.
-        get_unique_word_count: Возвращает количество уникальных слов.
-        get_lexical_diversity: Вычисляет отношение уникальных слов к общему числу слов.
-        analyze_lexical_lists: Анализирует покрытие текста по заданным лексическим словарям.
-        determine_actfl_level: Определяет уровень текста по системе ACTFL на основе лексического покрытия.
-        get_key_words: Выделяет ключевые слова из базовых лексических словарей (A1 ∪ A2).
-        get_most_useful_words: Выделяет слова, отсутствующие в базовых лексических словарях (A1 ∪ A2).
-        get_stats: Возвращает полную статистику по тексту, объединяя базовые и новые метрики.
-        get_full_analysis_text: Форматирует итоговый анализ в виде многострочного текста.
+      tokenize_words: Токенизация текста на слова.
+      tokenize_sentences: Разбиение текста на предложения.
+      lemmatize_words: Лемматизация с исключением стоп-слов.
+      calculate_reading_time: Расчёт времени чтения по уровням CEFR.
+      count_pos_tags: Подсчёт частей речи.
+      calculate_lix: Вычисление индекса читаемости LIX.
+      get_unique_word_count: Подсчёт уникальных слов.
+      get_lexical_diversity: Расчёт лексического разнообразия.
+      analyze_lexical_lists: Анализ покрытия текста по словарям (CEFR и freq_dict).
+      determine_actfl_level: Определение уровня текста по системе ACTFL.
+      get_key_words: Выделение ключевых слов по метрике TF/IDF.
+      get_most_useful_words: Выделение полезных слов (отсутствующих в A1 ∪ A2) с использованием TF/IDF.
+      get_full_analysis_text: Форматирование полного анализа в виде многострочного текста.
 
     Исключения:
-        ValueError: Выбрасывается, если:
-            - текст пустой или не является строкой,
-            - текст не содержит русских букв,
-            - в тексте меньше 5 слов.
+      ValueError: Выбрасывается, если текст пустой, не является строкой, не содержит русских букв или содержит менее 5 слов.
     """
 
     def __init__(self, text: str) -> None:
@@ -196,13 +193,13 @@ class TextAnalyzer:
 
     def analyze_lexical_lists(self) -> Dict[str, Any]:
         """
-        Анализирует покрытие текста по лексическим словарям.
+        Анализирует покрытие текста по лексическим словарям CEFR и по частотному словарю (freq_dict).
 
-        Для каждого словаря (A1, A2, B1, B2, C1, C2) определяется процент слов,
-        присутствующих в этом словаре, а также список слов, отсутствующих в нём.
-        Проводится также анализ по частотному словарю (dictionary_500).
+        Для каждого уровня (A1, A2, B1, B2, C1, C2) рассчитывается процент присутствующих слов,
+        а также составляется список слов, отсутствующих в словаре.
+        Для частотного словаря берутся ключи из freq_dict.
 
-        :return: Словарь с информацией по каждому лексическому списку.
+        :return: Словарь с информацией по каждому списку.
         """
         lexical_analysis = {}
         lexical_lists = {
@@ -222,11 +219,12 @@ class TextAnalyzer:
                 "coverage": round(coverage),
                 "not_included": not_included
             }
-        # Анализ для частотного словаря dictionary_500
-        intersection = text_unique.intersection(dictionary_500)
+        # Анализ для частотного словаря freq_dict
+        corpus_words = set(freq_dict.keys())
+        intersection = text_unique.intersection(corpus_words)
         coverage = (len(intersection) / len(text_unique)) * 100 if text_unique else 0
-        rare_words = sorted(list(text_unique - dictionary_500))
-        lexical_analysis["dictionary_500"] = {
+        rare_words = sorted(list(text_unique - corpus_words))
+        lexical_analysis["frequency"] = {
             "coverage": round(coverage),
             "rare_words": rare_words
         }
@@ -257,34 +255,51 @@ class TextAnalyzer:
 
     def get_key_words(self) -> List[str]:
         """
-        Выделяет «ключевые слова» — слова, присутствующие в базовых лексических словарях (A1 ∪ A2).
+        Выделяет ключевые слова на основе метрики TF/IDF.
+        Для каждого слова TF рассчитывается по лемматизированному списку (self.normalized_words),
+        а затем его оценка = (TF) / (частота из freq_dict + ε).
+        Слова сортируются по убыванию оценки – чем выше оценка, тем слово характернее для данного текста.
 
-        :return: Отсортированный список ключевых слов.
+        :return: Список ключевых слов, отсортированных по значимости.
         """
-        basic_vocab = a1.union(a2)
-        text_unique = set(self.words)
-        key_words = sorted(list(text_unique.intersection(basic_vocab)))
-        return key_words
+        tf = {}
+        for word in self.normalized_words:
+            tf[word] = tf.get(word, 0) + 1
+        epsilon = 0.1  # корректирующий коэффициент для избежания деления на 0
+        scores = {}
+        for word, count in tf.items():
+            corpus_freq = freq_dict.get(word, epsilon)
+            scores[word] = count / corpus_freq
+        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [word for word, score in sorted_words]
 
     def get_most_useful_words(self) -> List[str]:
         """
-        Выделяет «самые полезные слова» — слова, отсутствующие в базовых лексических словарях (A1 ∪ A2),
-        то есть характеризующие более высокий уровень лексики.
+        Выделяет «самые полезные слова» – те, которых нет в базовых словарях (A1 ∪ A2),
+        и сортирует их по значению TF/IDF (рассчитывается как (TF) / (частота из freq_dict + ε)).
 
-        :return: Отсортированный список слов.
+        :return: Список полезных слов, отсортированный по убыванию значимости.
         """
         basic_vocab = a1.union(a2)
-        text_unique = set(self.words)
-        useful_words = sorted(list(text_unique - basic_vocab))
-        return useful_words
+        tf = {}
+        for word in self.normalized_words:
+            tf[word] = tf.get(word, 0) + 1
+        epsilon = 0.1
+        scores = {}
+        for word, count in tf.items():
+            if word not in basic_vocab:
+                corpus_freq = freq_dict.get(word, epsilon)
+                scores[word] = count / corpus_freq
+        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [word for word, score in sorted_words]
 
-     def get_full_analysis_text(self) -> str:
+    def get_full_analysis_text(self) -> str:
         """
         Форматирует итоговый анализ текста в виде многострочной строки.
 
         :return: Отформатированная строка с детальным анализом текста.
         """
-        
+
         lines = [
             f"Уровень текста в системе ACTFL - {self.determine_actfl_level()}",
             f"Знаков с пробелами - {self.character_count}",
@@ -293,33 +308,35 @@ class TextAnalyzer:
             f"Уникальных слов - {self.get_unique_word_count()}",
             f"Лексическое разнообразие - {self.get_lexical_diversity()}"
         ]
-        
+
         reading_times = self.calculate_reading_time()
         for cefr_level, times in reading_times.items():
             lines.append(f"Изучающее чтение: {times['study_time']}")
             lines.append(f"Просмотровое чтение: {times['skim_time']}")
-        
+
         key_words = self.get_key_words()
         if key_words:
             lines.append("\nКлючевые слова:\n" + ", ".join(key_words))
-        
+
         useful_words = self.get_most_useful_words()
         if useful_words:
             lines.append("\nСамые полезные слова:\n" + ", ".join(useful_words))
-        
+
         lexical_lists = self.analyze_lexical_lists()
         for level, data in lexical_lists.items():
             lines.append(f"\nЛексический словарь {level} покрывает {data['coverage']}%")
             not_included = data.get("not_included", [])
             if not_included:
-                lines.append(f"Не входит в лексический словарь {level}: " + ", ".join(not_included[:10]) + ("..." if len(not_included) > 10 else ""))
-        
+                lines.append(f"Не входит в лексический словарь {level}: " + ", ".join(not_included[:10]) + (
+                    "..." if len(not_included) > 10 else ""))
+
         return "\n".join(lines)
+
 
 if __name__ == "__main__":
     import sys
-    
+
     input_text = sys.stdin.read().strip()
-    
+
     analyzer = TextAnalyzer(input_text)
     print(analyzer.get_full_analysis_text())
