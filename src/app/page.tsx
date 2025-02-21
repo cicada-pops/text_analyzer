@@ -105,16 +105,14 @@ export default function TextAnalysis() {
                     </div>
                     
                     <div className="relative">
-                      <Textarea
+                      <div
                         ref={resultTextRef}
-                        placeholder="Результат"
-                        className="resize-none border-0 bg-[#f2f4f9] text-[#2d4858] rounded-l-none rounded-r-[20px] p-4 overflow-y-auto transition-[height]"
+                        className="resize-none border-0 bg-[#f2f4f9] text-[#2d4858] rounded-l-none rounded-r-[20px] p-4 overflow-y-auto transition-[height] whitespace-pre-wrap"
                         style={{ 
                           height,
                           maxHeight: `${MAX_HEIGHT}px`
                         }}
-                        value={result}
-                        readOnly
+                        dangerouslySetInnerHTML={{ __html: result || 'Результат' }}
                       />
                     </div>
                   </div>

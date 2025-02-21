@@ -3,6 +3,8 @@ from collections import defaultdict
 import os
 from freq_dictionary import freq_dict
 import nltk
+import g4f
+from g4f.Provider import Blackbox
 
 nltk_data_path = os.path.expanduser('~/nltk_data')
 flag_file = os.path.join(nltk_data_path, '.resources_downloaded')
@@ -224,7 +226,7 @@ class TextAnalyzer:
         intersection = text_unique.intersection(corpus_words)
         coverage = (len(intersection) / len(text_unique)) * 100 if text_unique else 0
         rare_words = sorted(list(text_unique - corpus_words))
-        lexical_analysis["frequency"] = {
+        lexical_analysis["частотности"] = {
             "coverage": round(coverage),
             "rare_words": rare_words
         }
@@ -232,26 +234,40 @@ class TextAnalyzer:
 
     def determine_actfl_level(self) -> str:
         """
-        Определяет уровень текста по системе ACTFL на основе покрытия лексических словарей.
-
-        Перебор словарей происходит от самого высокого уровня (C1) к базовому (A1).
-        Если покрытие соответствующего словаря ≥ 50%, уровень текста определяется по этому словарю.
-
+        Определяет уровень текста по системе ACTFL с помощью AI (g4f).
+        
         :return: Строка с определённым уровнем (например, "Advanced Mid", "Intermediate High" и т.д.).
         """
-        analysis = self.analyze_lexical_lists()
-        if analysis.get("C1", {}).get("coverage", 0) >= 50:
-            return "Advanced Mid"
-        elif analysis.get("B2", {}).get("coverage", 0) >= 50:
-            return "Advanced Low"
-        elif analysis.get("B1", {}).get("coverage", 0) >= 50:
-            return "Intermediate High"
-        elif analysis.get("A2", {}).get("coverage", 0) >= 50:
-            return "Intermediate Mid"
-        elif analysis.get("A1", {}).get("coverage", 0) >= 50:
-            return "Novice High"
-        else:
-            return "Below Novice"
+        try:
+            prompt = f"""
+            Определи уровень сложности этого русского текста по системе ACTFL. 
+            Варианты уровней: "Advanced Mid", "Advanced Low", "Intermediate High", "Intermediate Mid", "Novice High", "Below Novice".
+            Ответь только названием уровня, без дополнительных пояснений.
+            
+            Текст: {' '.join(self.words)}
+            """
+            
+            response = g4f.ChatCompletion.create(
+                model="gpt-4o",
+                provider=Blackbox,
+                messages=[{"role": "user", "content": prompt}],
+                stream=False
+            )
+            
+            # Очищаем и проверяем ответ
+            level = response.strip()
+            valid_levels = {
+                "Advanced Mid", "Advanced Low", "Intermediate High",
+                "Intermediate Mid", "Novice High", "Below Novice"
+            }
+            
+            if level in valid_levels:
+                return level
+            return "Intermediate Mid"  # значение по умолчанию
+            
+        except Exception as e:
+            print(f"Error in ACTFL determination: {e}")
+            return "Intermediate Mid"  # значение по умолчанию в случае ошибки
 
     def get_key_words(self) -> List[str]:
         """
@@ -299,35 +315,35 @@ class TextAnalyzer:
 
         :return: Отформатированная строка с детальным анализом текста.
         """
-
+        
         lines = [
-            f"Уровень текста в системе ACTFL - {self.determine_actfl_level()}",
-            f"Знаков с пробелами - {self.character_count}",
-            f"Предложений - {self.sentence_count}",
-            f"Слов - {self.word_count}",
-            f"Уникальных слов - {self.get_unique_word_count()}",
-            f"Лексическое разнообразие - {self.get_lexical_diversity()}"
+            f"<b>Уровень текста в системе ACTFL</b> - {self.determine_actfl_level()}",
+            f"<b>Знаков с пробелами</b> - {self.character_count}",
+            f"<b>Предложений</b> - {self.sentence_count}",
+            f"<b>Слов</b> - {self.word_count}",
+            f"<b>Уникальных слов</b> - {self.get_unique_word_count()}",
+            f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}\n"
         ]
 
         reading_times = self.calculate_reading_time()
         for cefr_level, times in reading_times.items():
-            lines.append(f"Изучающее чтение: {times['study_time']}")
-            lines.append(f"Просмотровое чтение: {times['skim_time']}")
+            lines.append(f"<b>Изучающее чтение уровень {cefr_level}</b>: {times['study_time']}")
+            lines.append(f"<b>Просмотровое чтение уровень {cefr_level}</b>: {times['skim_time']}")
 
         key_words = self.get_key_words()
         if key_words:
-            lines.append("\nКлючевые слова:\n" + ", ".join(key_words))
+            lines.append("\n<b>Ключевые слова</b>:\n" + ", ".join(key_words))
 
         useful_words = self.get_most_useful_words()
         if useful_words:
-            lines.append("\nСамые полезные слова:\n" + ", ".join(useful_words))
+            lines.append("\n<b>Самые полезные слова</b>:\n" + ", ".join(useful_words))
 
         lexical_lists = self.analyze_lexical_lists()
         for level, data in lexical_lists.items():
-            lines.append(f"\nЛексический словарь {level} покрывает {data['coverage']}%")
+            lines.append(f"\n<b>Лексический словарь {level}</b> покрывает {data['coverage']}%")
             not_included = data.get("not_included", [])
             if not_included:
-                lines.append(f"Не входит в лексический словарь {level}: " + ", ".join(not_included[:10]) + (
+                lines.append(f"<b>Не входит в лексический словарь {level}</b>: " + ", ".join(not_included[:10]) + (
                     "..." if len(not_included) > 10 else ""))
 
         return "\n".join(lines)
