@@ -68,7 +68,6 @@ class TextAnalyzer:
       calculate_lix: Вычисление индекса читаемости LIX.
       get_unique_word_count: Подсчёт уникальных слов.
       get_lexical_diversity: Расчёт лексического разнообразия.
-      get_sentences: Разбиение текста на предложения.
       get_words: Извлечение слов из предложения.
       get_syllables_count: Подсчёт количества слогов в слове.
       get_average_sentence_length: Вычисление средней длины предложения.
@@ -205,15 +204,7 @@ class TextAnalyzer:
         """
         return round(self.get_unique_word_count() / self.word_count, 2)
     
-    def get_sentences(self) -> List[str]:
-        """
-        Разбивает текст на предложения.
-
-        :return: Список предложений.
-        """
-        return re.split(r'[.!?]', self.text)
-    
-    def get_words(self, sentence) -> List[str]:
+    def get_words_in_sentence(self, sentence) -> List[str]:
         """
         Извлекает слова из предложения.
 
@@ -237,8 +228,8 @@ class TextAnalyzer:
 
         :return: Средняя длина предложения.
         """
-        sentences = self.get_sentences()
-        count_in_sentences = [len(self.get_average_sentences_length(sentence)) for sentence in sentences]
+        sentences = self.tokenize_sentences()
+        count_in_sentences = [len(self.get_words_in_sentence(sentence)) for sentence in sentences]
         return sum(count_in_sentences) / len(sentences) if len(sentences) != 0 else 0
     
     def get_average_word_lenght(self) -> float:
@@ -247,8 +238,7 @@ class TextAnalyzer:
 
         :return: Средняя длина слова.
         """
-        sentences = self.get_sentences()
-        words = [self.get_words(sentence) for sentence in sentences]
+        words = self.tokenize_words()
         len_words = [len(word) for word in words]
         return sum(len_words) / len(words) if len(words) != 0 else 0
     
@@ -258,8 +248,7 @@ class TextAnalyzer:
 
         :return: Среднее количество слогов на слово.
         """
-        sentences = self.get_sentences()
-        words = [self.get_words(sentence) for sentence in sentences]
+        words = self.tokenize_words()
         word_syllables_count = [self.get_syllables_count(word) for word in words]
         return sum(word_syllables_count) / len(words) if len(words) != 0 else 0
         
@@ -285,7 +274,7 @@ class TextAnalyzer:
         :param query: Запрос, для которого вычисляются оценки.
         :return: Список кортежей (предложение, BM25-оценка).
         """
-        sentences = self.get_sentences()
+        sentences = self.tokenize_sentences()
         tokenized_docs = [word_tokenize(sentence.lower()) for sentence in sentences]
         bm25 = BM25Okapi(tokenized_docs)
         tokenized_query = word_tokenize(query.lower())
