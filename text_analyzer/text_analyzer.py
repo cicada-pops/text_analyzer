@@ -271,7 +271,7 @@ class TextAnalyzer:
             print(f"Error in ACTFL determination: {e}")
             return "Intermediate Mid" 
 
-    def actfl_to_cefr(actfl_level: str) -> str:
+    def actfl_to_cefr(self, actfl_level: str) -> str:
         """
         Переводит уровень сложности по системе ACTFL в соответствующий уровень по системе CEFR.
         
@@ -329,7 +329,7 @@ class TextAnalyzer:
         """
         actfl_level = self.determine_actfl_level()
         cefr_level = self.actfl_to_cefr(actfl_level)
-        reading_times = self.calculate_reading_time()
+        reading_times = self.calculate_reading_time(cefr_level)
         
         lines = [
             f"<b>Уровень текста в системе ACTFL</b> - {actfl_level}",
