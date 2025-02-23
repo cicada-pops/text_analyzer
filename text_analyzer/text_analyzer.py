@@ -147,11 +147,10 @@ class TextAnalyzer:
         :param cefr_level: Уровень CEFR, для которого требуется рассчитать время чтения.
         :return: Словарь с параметрами study_time и skim_time для указанного уровня.
         """
-        # Проверяем и нормализуем уровень CEFR
-        cefr_level = cefr_level.upper()[:2]  # Берем только первые два символа и переводим в верхний регистр
+        cefr_level = cefr_level.upper()[:2]
         
         if cefr_level not in CEFR_READING_SPEED:
-            cefr_level = 'B1'  # значение по умолчанию
+            cefr_level = 'B1'
         
         speeds = CEFR_READING_SPEED[cefr_level]
         word_count = len(self.words)
@@ -496,8 +495,10 @@ class TextAnalyzer:
                 "<b>Результаты (предложение : релевантность)</b>:"
             ]
             
+            # Фильтруем результаты с нулевой релевантностью и форматируем оценку жирным шрифтом
             for sentence, score in bm25_scores:
-                lines.append(f"{sentence.strip()} : {score:.2f}")
+                if score > 0.01:  # Пропускаем результаты близкие к нулю
+                    lines.append(f"{sentence.strip()} : <b>{score:.2f}</b>")
             
             return "\n".join(lines)
         
