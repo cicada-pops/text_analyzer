@@ -2,6 +2,8 @@ import re
 from collections import defaultdict
 import os
 from freq_dictionary import freq_dict
+from typing import Tuple
+from rank_bm25 import BM25Okapi
 import nltk
 import g4f
 from g4f.Provider import Blackbox
@@ -66,6 +68,13 @@ class TextAnalyzer:
       calculate_lix: Вычисление индекса читаемости LIX.
       get_unique_word_count: Подсчёт уникальных слов.
       get_lexical_diversity: Расчёт лексического разнообразия.
+      get_words: Извлечение слов из предложения.
+      get_syllables_count: Подсчёт количества слогов в слове.
+      get_average_sentence_length: Вычисление средней длины предложения.
+      get_average_word_length: Определение средней длины слова.
+      get_average_syllables_word: Расчёт среднего количества слогов на слово.
+      get_flesh_index: Вычисление индекса удобочитаемости Флеша.
+      get_bm25_scores: Вычисление BM25-оценок для предложений по заданному запросу.
       analyze_lexical_lists: Анализ покрытия текста по словарям (CEFR и freq_dict).
       determine_actfl_level: Определение уровня текста по системе ACTFL.
       get_key_words: Выделение ключевых слов по метрике TF/IDF.
@@ -193,6 +202,82 @@ class TextAnalyzer:
         :return: Лексическое разнообразие, округленное до двух знаков после запятой.
         """
         return round(self.get_unique_word_count() / self.word_count, 2)
+    
+    def get_words_in_sentence(self, sentence) -> List[str]:
+        """
+        Извлекает слова из предложения.
+
+        :param sentence: Входное предложение.
+        :return: Список слов в предложении.
+        """
+        return re.findall(r'\b\w+\b', sentence)
+    
+    def get_syllables_count(self, word) -> int:
+        """
+        Подсчитывает количество слогов в слове.
+
+        :param word: Входное слово.
+        :return: Количество слогов в слове.
+        """
+        return len(re.findall(r'[аеёиоуыэюя]', word, re.IGNORECASE))
+    
+    def get_average_sentence_length(self) -> float:
+        """
+        Рассчитывает среднюю длину предложения (количество слов в среднем предложении).
+
+        :return: Средняя длина предложения.
+        """
+        sentences = self.tokenize_sentences()
+        count_in_sentences = [len(self.get_words_in_sentence(sentence)) for sentence in sentences]
+        return sum(count_in_sentences) / len(sentences) if len(sentences) != 0 else 0
+    
+    def get_average_word_lenght(self) -> float:
+        """
+        Рассчитывает среднюю длину слова в тексте.
+
+        :return: Средняя длина слова.
+        """
+        words = self.tokenize_words()
+        len_words = [len(word) for word in words]
+        return sum(len_words) / len(words) if len(words) != 0 else 0
+    
+    def get_average_syllables_word(self) -> float:
+        """
+        Рассчитывает среднее количество слогов на слово в тексте.
+
+        :return: Среднее количество слогов на слово.
+        """
+        words = self.tokenize_words()
+        word_syllables_count = [self.get_syllables_count(word) for word in words]
+        return sum(word_syllables_count) / len(words) if len(words) != 0 else 0
+        
+    def get_flesh_index(self) -> float:
+        """
+        Рассчитывает индекс удобочитаемости Флеша.
+
+        Формула:
+            Flesch Index = 206.835 - (1.015 * ASL) - (84.6 * ASW),
+        где ASL — средняя длина предложения,
+            ASW — среднее количество слогов на слово.
+
+        :return: Значение индекса Флеша.
+        """
+        ASL = self.get_average_sentence_length()
+        ASW = self.get_average_syllables_word()
+        return 206.835 - (1.015 * ASL) - (84.6 * ASW)
+    
+    def get_bm25_scores(self, query) -> List[Tuple[str, float]]:
+        """
+        Рассчитывает BM25-оценки предложений по заданному запросу.
+
+        :param query: Запрос, для которого вычисляются оценки.
+        :return: Список кортежей (предложение, BM25-оценка).
+        """
+        sentences = self.tokenize_sentences()
+        tokenized_docs = [word_tokenize(sentence.lower()) for sentence in sentences]
+        bm25 = BM25Okapi(tokenized_docs)
+        tokenized_query = word_tokenize(query.lower())
+        return list(zip(sentences, bm25.get_scores(tokenized_query)))
 
     def analyze_lexical_lists(self) -> Dict[str, Any]:
         """
