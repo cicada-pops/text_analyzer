@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 
 export default function TextAnalysis() {
   const [text, setText] = useState('')
@@ -11,9 +13,11 @@ export default function TextAnalysis() {
   const [isLoading, setIsLoading] = useState(false)
   const [height, setHeight] = useState('200px')
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [mode, setMode] = useState('standard')
+  const [bm25Query, setBm25Query] = useState('')
   
   const sourceTextRef = useRef<HTMLTextAreaElement>(null)
-  const resultTextRef = useRef<HTMLTextAreaElement>(null)
+  const resultTextRef = useRef<HTMLDivElement>(null)
   
   const MAX_HEIGHT = 600
   const MIN_HEIGHT = 200
@@ -49,7 +53,11 @@ export default function TextAnalysis() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ 
+          text,
+          mode,
+          query: mode === 'bm25' ? bm25Query : ''
+        }),
       });
 
       if (!response.ok) {
@@ -120,11 +128,44 @@ export default function TextAnalysis() {
               </div>
             </div>
             
+            <div className="flex flex-col items-center mt-4 mb-4 space-y-4">
+              <RadioGroup
+                defaultValue="standard"
+                value={mode}
+                onValueChange={(value) => {
+                  setMode(value);
+                  if (value === 'standard') setBm25Query('');
+                }}
+                className="flex space-x-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="standard" id="standard" />
+                  <Label htmlFor="standard">Стандартный анализ</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="bm25" id="bm25" />
+                  <Label htmlFor="bm25">BM25 анализ</Label>
+                </div>
+              </RadioGroup>
+
+              {mode === 'bm25' && (
+                <div className="w-full max-w-xl">
+                  <Textarea
+                    placeholder="Введите предложение для поиска похожих"
+                    className="resize-none border bg-white text-[#2d4858] rounded-[10px] p-4"
+                    value={bm25Query}
+                    onChange={(e) => setBm25Query(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-center mt-8">
               <Button
                 className="bg-white text-[#2d4858] hover:bg-[#E8F0FB]/90 px-8 rounded-[10px] shadow-[0_0_20px_rgba(0,0,0,0.2)]"
                 onClick={analyzeText}
-                disabled={isLoading}
+                disabled={isLoading || (mode === 'bm25' && !bm25Query.trim())}
               >
                 {isLoading ? 'Анализируем...' : 'Анализировать текст'}
               </Button>

@@ -7,6 +7,7 @@ from rank_bm25 import BM25Okapi
 import nltk
 import g4f
 from g4f.Provider import Blackbox
+import math
 
 nltk_data_path = os.path.expanduser('~/nltk_data')
 flag_file = os.path.join(nltk_data_path, '.resources_downloaded')
@@ -266,18 +267,41 @@ class TextAnalyzer:
         ASW = self.get_average_syllables_word()
         return 206.835 - (1.015 * ASL) - (84.6 * ASW)
     
-    def get_bm25_scores(self, query) -> List[Tuple[str, float]]:
+    def get_bm25_scores(self, query: str) -> List[Tuple[str, float]]:
         """
         Рассчитывает BM25-оценки предложений по заданному запросу.
-
-        :param query: Запрос, для которого вычисляются оценки.
-        :return: Список кортежей (предложение, BM25-оценка).
+        
+        :param query: Запрос для поиска похожих предложений
+        :return: Список кортежей (предложение, BM25-оценка)
         """
-        sentences = self.tokenize_sentences()
-        tokenized_docs = [word_tokenize(sentence.lower()) for sentence in sentences]
-        bm25 = BM25Okapi(tokenized_docs)
-        tokenized_query = word_tokenize(query.lower())
-        return list(zip(sentences, bm25.get_scores(tokenized_query)))
+        query_words = query.lower().split()
+        results = []
+        
+        k1 = 1.5
+        b = 0.75
+        
+        for sentence in self.sentences:
+            doc_words = sentence.lower().split()
+            doc_length = len(doc_words)
+            
+            term_freq = {word: doc_words.count(word) for word in query_words}
+            
+            def compute_idf(term, total_docs=1, docs_with_term=1):
+                return math.log((total_docs - docs_with_term + 0.5) / (docs_with_term + 0.5) + 1)
+            
+            idf_scores = {word: compute_idf(word) for word in query_words}
+            
+            bm25_score = sum(
+                idf_scores[word] * (
+                    (term_freq.get(word, 0) * (k1 + 1)) / 
+                    (term_freq.get(word, 0) + k1 * (1 - b + b * (doc_length / len(doc_words))))
+                )
+                for word in query_words
+            )
+            
+            results.append((sentence, bm25_score))
+        
+        return sorted(results, key=lambda x: x[1], reverse=True)
 
     def analyze_lexical_lists(self) -> Dict[str, Any]:
         """
@@ -402,12 +426,30 @@ class TextAnalyzer:
         sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         return [word for word, score in sorted_words]
 
-    def get_full_analysis_text(self) -> str:
+    def get_full_analysis_text(self, mode='standard', query=None) -> str:
         """
         Форматирует итоговый анализ текста в виде многострочной строки.
 
+        :param mode: Режим анализа ('standard' или 'bm25')
+        :param query: Запрос для BM25 анализа
         :return: Отформатированная строка с детальным анализом текста.
         """
+        if mode == 'bm25':
+            if not query:
+                query = self.sentences[0] if self.sentences else ''
+            
+            bm25_scores = self.get_bm25_scores(query)
+            lines = [
+                f"<b>BM25 Анализ</b>",
+                f"<b>Запрос</b>: {query}\n",
+                "<b>Результаты (предложение : релевантность)</b>:"
+            ]
+            
+            for sentence, score in bm25_scores:
+                lines.append(f"{sentence.strip()} : {score:.2f}")
+            
+            return "\n".join(lines)
+        
         actfl_level = self.determine_actfl_level()
         cefr_level = self.actfl_to_cefr(actfl_level)
         reading_times = self.calculate_reading_time(cefr_level)
@@ -447,6 +489,10 @@ if __name__ == "__main__":
     import sys
 
     input_text = sys.stdin.read().strip()
+    mode = sys.argv[1] if len(sys.argv) > 1 else 'standard'
+    query = sys.argv[2] if len(sys.argv) > 2 else ''
+
+    print(f"Debug: Mode={mode}, Query={query}", file=sys.stderr)
 
     analyzer = TextAnalyzer(input_text)
-    print(analyzer.get_full_analysis_text())
+    print(analyzer.get_full_analysis_text(mode=mode, query=query))

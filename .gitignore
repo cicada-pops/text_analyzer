@@ -40,3 +40,4 @@ venv/
 .vscode/
 *.swp
 *.swo 
+test.py

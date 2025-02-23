@@ -4,12 +4,16 @@ import path from 'path';
 
 export async function POST(req: Request) {
   try {
-    const { text } = await req.json();
+    const { text, mode, query } = await req.json();
 
     const scriptPath = path.join(process.cwd(), 'text_analyzer', 'text_analyzer.py');
     
     return new Promise((resolve, reject) => {
-      const pythonProcess = spawn('python3', [scriptPath]);
+      const pythonProcess = spawn('python3', [
+        scriptPath,
+        mode || 'standard',
+        query || ''
+      ]);
       let result = '';
       let error = '';
 
