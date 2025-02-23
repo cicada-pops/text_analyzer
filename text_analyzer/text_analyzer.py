@@ -177,7 +177,6 @@ class TextAnalyzer:
         """
         return (self.word_count / self.sentence_count) + (100 * self.long_word_count / self.word_count)
 
-    # Новые методы
 
     def get_unique_word_count(self) -> int:
         """
@@ -223,7 +222,6 @@ class TextAnalyzer:
                 "coverage": round(coverage),
                 "not_included": not_included
             }
-        # Анализ для частотного словаря freq_dict
         corpus_words = set(freq_dict.keys())
         intersection = text_unique.intersection(corpus_words)
         coverage = (len(intersection) / len(text_unique)) * 100 if text_unique else 0
@@ -256,7 +254,6 @@ class TextAnalyzer:
                 stream=False
             )
             
-            # Очищаем и проверяем ответ
             level = response.strip()
             valid_levels = {
                 "Advanced Mid", "Advanced Low", "Intermediate High",
@@ -278,8 +275,7 @@ class TextAnalyzer:
         :param actfl_level: Уровень ACTFL.
         :return: Соответствующий уровень CEFR
         """
-
-        return ACTFL_TO_CEFR.get(actfl_level, None)
+        return ACTFL_TO_CEFR.get(actfl_level, "Неизвестный уровень")
 
     def get_key_words(self) -> List[str]:
         """
