@@ -80,8 +80,8 @@ class TextAnalyzer:
       get_bm25_scores: Вычисление BM25-оценок для предложений по заданному запросу.
       analyze_lexical_lists: Анализ покрытия текста по словарям (CEFR и freq_dict).
       determine_actfl_level: Определение уровня текста по системе ACTFL.
-      get_key_words:  Выделяет ключевые фразы из текста с использованием алгоритма RAKE.
-      get_most_useful_words: Выделение полезных слов (отсутствующих в A1 ∪ A2) с использованием TF/IDF.
+      get_key_words:  Выделяет ключевые слова из текста.
+      get_most_useful_words: Выделяет наиболее полезные слова для изучения.
       get_full_analysis_text: Форматирование полного анализа в виде многострочного текста.
 
     Исключения:
@@ -147,19 +147,21 @@ class TextAnalyzer:
         :param cefr_level: Уровень CEFR, для которого требуется рассчитать время чтения.
         :return: Словарь с параметрами study_time и skim_time для указанного уровня.
         """
+        # Проверяем и нормализуем уровень CEFR
+        cefr_level = cefr_level.upper()[:2]  # Берем только первые два символа и переводим в верхний регистр
+        
         if cefr_level not in CEFR_READING_SPEED:
-            raise ValueError(f"Неизвестный уровень CEFR: {cefr_level}")
-
+            cefr_level = 'B1'  # значение по умолчанию
+        
         speeds = CEFR_READING_SPEED[cefr_level]
-        study_speed = speeds["study"]
-        skim_speed = speeds["skim"]
+        word_count = len(self.words)
 
-        study_time = max(self.word_count / study_speed, 1)
-        skim_time = max(self.word_count / skim_speed, 1)
+        study_time_minutes = word_count / speeds['study']
+        skim_time_minutes = word_count / speeds['skim']
 
         return {
-            "study_time": format_time(study_time),
-            "skim_time": format_time(skim_time),
+            'study_time': format_time(study_time_minutes),
+            'skim_time': format_time(skim_time_minutes)
         }
 
     def count_pos_tags(self) -> Dict[str, str]:
@@ -388,42 +390,92 @@ class TextAnalyzer:
         """
         return ACTFL_TO_CEFR.get(actfl_level, "Неизвестный уровень")
 
-    def get_key_words(self, top_n: int = 10, window_size: int = 2) -> List[str]:
+    def get_key_words(self, top_n: int = 1, min_length: int = 3) -> List[str]:
         """
-        Выделяет ключевые слова из текста с использованием алгоритма RAKE.
+        Выделяет ключевые слова из текста.
         Аргументы:
-          top_n (int): Количество ключевых ключевых фраз для возврата (по умолчанию 10).
-          window_size (int): Не используется в алгоритме RAKE, оставлен для совместимости.
+          top_n (int): Количество ключевых слов для возврата (по умолчанию 1).
+          min_length (int): Минимальная длина слова в символах.
         Возвращает:
-          List[str]: Список ключевых фраз.
+          List[str]: Список наиболее значимых слов.
         """
-        from nlp_rake import Rake
-        stops = list(self.stop_words)
-        rake = Rake(stopwords=stops, max_words=3)
-        key_phrases = rake.apply(self.text)
-        # Берем только фразы (первый элемент каждого кортежа) и ограничиваем количество
-        return [phrase for phrase, score in key_phrases[:top_n]]
+        word_freq = {}
+        pos_info = {} 
+        
+        for word in self.normalized_words:
+            if (len(word) >= min_length and  # достаточно длинное
+                word not in self.stop_words and  # не стоп-слово
+                word in freq_dict):  # есть в частотном словаре
+                
+                # Получаем часть речи
+                morph_info = self.morph.parse(word)[0]
+                pos = morph_info.tag.POS
+                
+                word_freq[word] = word_freq.get(word, 0) + 1
+                pos_info[word] = pos
+        
+        word_scores = {}
+        total_words = len(self.normalized_words)
+        
+        for word, freq in word_freq.items():
+            tf = freq / total_words
+            idf = 1 / (freq_dict[word] + 1)
+            
+            pos_multiplier = 1.5 if pos_info[word] in {'NOUN', 'ADJF', 'ADJS'} else 1.0
+            
+            length_multiplier = 1.2 if 5 <= len(word) <= 12 else 1.0
+            
+            word_scores[word] = tf * idf * pos_multiplier * length_multiplier
+        
+        sorted_words = sorted(word_scores.items(), key=lambda x: x[1], reverse=True)
+        return [word for word, _ in sorted_words[:top_n]]
 
-    def get_most_useful_words(self) -> List[str]:
+    def get_most_useful_words(self, top_n: int = 2, min_freq: int = 1) -> List[str]:
         """
-        Выделяет полезные слова — те, которые отсутствуют в базовых словарях (A1 ∪ A2)
-        и присутствуют в частотном словаре (freq_dict). Для каждого слова вычисляется отношение
-        частоты появления в тексте (TF) к его частоте в freq_dict (TF/IDF), после чего слова
-        сортируются по убыванию этого показателя.
+        Выделяет наиболее полезные слова для изучения.
+        Аргументы:
+          top_n (int): Количество слов для возврата (по умолчанию 2).
+          min_freq (int): Минимальная частота слова в тексте.
+        Возвращает:
+          List[str]: Список наиболее полезных слов.
         """
         basic_vocab = a1.union(a2)
-
-        tf = {}
-        for word in self.normalized_words:
-            tf[word] = tf.get(word, 0) + 1
         
+        word_info = {}
+        for word in self.normalized_words:
+            if (word not in basic_vocab and  # нет в базовом словаре
+                word in freq_dict and        # есть в частотном словаре
+                len(word) > 3):             # не слишком короткое
+                
+                # Получаем часть речи и нормальную форму
+                morph_info = self.morph.parse(word)[0]
+                pos = morph_info.tag.POS
+                
+                if word not in word_info:
+                    word_info[word] = {
+                        'count': 0,
+                        'pos': pos
+                    }
+                word_info[word]['count'] += 1
+        
+        # Оцениваем слова
         useful_scores = {}
-        for word, count in tf.items():
-            if word not in basic_vocab and word in freq_dict:
-                useful_scores[word] = count / freq_dict[word]
-
+        for word, info in word_info.items():
+            if info['count'] >= min_freq:
+                base_score = info['count'] * (1 / (freq_dict[word] + 1))
+                
+                # Множители для разных частей речи
+                pos_multiplier = {
+                    'NOUN': 1.3,  # существительные
+                    'VERB': 1.2,  # глаголы
+                    'ADJF': 1.1,  # прилагательные
+                    'ADJS': 1.1,
+                }.get(info['pos'], 1.0)
+                
+                useful_scores[word] = base_score * pos_multiplier
+        
         sorted_useful = sorted(useful_scores.items(), key=lambda x: x[1], reverse=True)
-        return [word for word, score in sorted_useful]
+        return [word for word, _ in sorted_useful[:top_n]]
 
     def get_full_analysis_text(self, mode='standard', query=None) -> str:
         """
@@ -451,7 +503,10 @@ class TextAnalyzer:
         
         actfl_level = self.determine_actfl_level()
         cefr_level = self.actfl_to_cefr(actfl_level)
-        reading_times = self.calculate_reading_time(cefr_level)
+        
+        # Нормализуем уровень CEFR перед передачей
+        normalized_cefr = cefr_level.upper()[:2]  # Берем только первые два символа (A1, B2, C1 и т.д.)
+        reading_times = self.calculate_reading_time(normalized_cefr)
         
         lines = [
             f"<b>Уровень текста в системе ACTFL</b> - {actfl_level}",
