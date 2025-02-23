@@ -7,6 +7,8 @@ from rank_bm25 import BM25Okapi
 import nltk
 import g4f
 from g4f.Provider import Blackbox
+import networkx as nx
+from nlp_rake import Rake
 import math
 
 nltk_data_path = os.path.expanduser('~/nltk_data')
@@ -78,7 +80,7 @@ class TextAnalyzer:
       get_bm25_scores: Вычисление BM25-оценок для предложений по заданному запросу.
       analyze_lexical_lists: Анализ покрытия текста по словарям (CEFR и freq_dict).
       determine_actfl_level: Определение уровня текста по системе ACTFL.
-      get_key_words: Выделение ключевых слов по метрике TF/IDF.
+      get_key_words:  Выделяет ключевые фразы из текста с использованием алгоритма RAKE.
       get_most_useful_words: Выделение полезных слов (отсутствующих в A1 ∪ A2) с использованием TF/IDF.
       get_full_analysis_text: Форматирование полного анализа в виде многострочного текста.
 
@@ -386,45 +388,42 @@ class TextAnalyzer:
         """
         return ACTFL_TO_CEFR.get(actfl_level, "Неизвестный уровень")
 
-    def get_key_words(self) -> List[str]:
+    def get_key_words(self, top_n: int = 10, window_size: int = 2) -> List[str]:
         """
-        Выделяет ключевые слова на основе метрики TF/IDF.
-        Для каждого слова TF рассчитывается по лемматизированному списку (self.normalized_words),
-        а затем его оценка = (TF) / (частота из freq_dict + ε).
-        Слова сортируются по убыванию оценки – чем выше оценка, тем слово характернее для данного текста.
-
-        :return: Список ключевых слов, отсортированных по значимости.
+        Выделяет ключевые слова из текста с использованием алгоритма RAKE.
+        Аргументы:
+          top_n (int): Количество ключевых ключевых фраз для возврата (по умолчанию 10).
+          window_size (int): Не используется в алгоритме RAKE, оставлен для совместимости.
+        Возвращает:
+          List[str]: Список ключевых фраз.
         """
-        tf = {}
-        for word in self.normalized_words:
-            tf[word] = tf.get(word, 0) + 1
-        epsilon = 0.1  # корректирующий коэффициент для избежания деления на 0
-        scores = {}
-        for word, count in tf.items():
-            corpus_freq = freq_dict.get(word, epsilon)
-            scores[word] = count / corpus_freq
-        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return [word for word, score in sorted_words]
+        from nlp_rake import Rake
+        stops = list(self.stop_words)
+        rake = Rake(stopwords=stops, max_words=3)
+        key_phrases = rake.apply(self.text)
+        # Берем только фразы (первый элемент каждого кортежа) и ограничиваем количество
+        return [phrase for phrase, score in key_phrases[:top_n]]
 
     def get_most_useful_words(self) -> List[str]:
         """
-        Выделяет «самые полезные слова» – те, которых нет в базовых словарях (A1 ∪ A2),
-        и сортирует их по значению TF/IDF (рассчитывается как (TF) / (частота из freq_dict + ε)).
-
-        :return: Список полезных слов, отсортированный по убыванию значимости.
+        Выделяет полезные слова — те, которые отсутствуют в базовых словарях (A1 ∪ A2)
+        и присутствуют в частотном словаре (freq_dict). Для каждого слова вычисляется отношение
+        частоты появления в тексте (TF) к его частоте в freq_dict (TF/IDF), после чего слова
+        сортируются по убыванию этого показателя.
         """
         basic_vocab = a1.union(a2)
+
         tf = {}
         for word in self.normalized_words:
             tf[word] = tf.get(word, 0) + 1
-        epsilon = 0.1
-        scores = {}
+        
+        useful_scores = {}
         for word, count in tf.items():
-            if word not in basic_vocab:
-                corpus_freq = freq_dict.get(word, epsilon)
-                scores[word] = count / corpus_freq
-        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return [word for word, score in sorted_words]
+            if word not in basic_vocab and word in freq_dict:
+                useful_scores[word] = count / freq_dict[word]
+
+        sorted_useful = sorted(useful_scores.items(), key=lambda x: x[1], reverse=True)
+        return [word for word, score in sorted_useful]
 
     def get_full_analysis_text(self, mode='standard', query=None) -> str:
         """
