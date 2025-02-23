@@ -7,6 +7,8 @@ from rank_bm25 import BM25Okapi
 import nltk
 import g4f
 from g4f.Provider import Blackbox
+import networkx as nx
+from nlp_rake import Rake
 
 nltk_data_path = os.path.expanduser('~/nltk_data')
 flag_file = os.path.join(nltk_data_path, '.resources_downloaded')
@@ -77,7 +79,7 @@ class TextAnalyzer:
       get_bm25_scores: Вычисление BM25-оценок для предложений по заданному запросу.
       analyze_lexical_lists: Анализ покрытия текста по словарям (CEFR и freq_dict).
       determine_actfl_level: Определение уровня текста по системе ACTFL.
-      get_key_words: Выделение ключевых слов по метрике TF/IDF.
+      get_key_words:  Выделяет ключевые фразы из текста с использованием алгоритма RAKE.
       get_most_useful_words: Выделение полезных слов (отсутствующих в A1 ∪ A2) с использованием TF/IDF.
       get_full_analysis_text: Форматирование полного анализа в виде многострочного текста.
 
@@ -203,7 +205,7 @@ class TextAnalyzer:
         :return: Лексическое разнообразие, округленное до двух знаков после запятой.
         """
         return round(self.get_unique_word_count() / self.word_count, 2)
-    
+
     def get_words_in_sentence(self, sentence) -> List[str]:
         """
         Извлекает слова из предложения.
@@ -212,7 +214,7 @@ class TextAnalyzer:
         :return: Список слов в предложении.
         """
         return re.findall(r'\b\w+\b', sentence)
-    
+
     def get_syllables_count(self, word) -> int:
         """
         Подсчитывает количество слогов в слове.
@@ -221,7 +223,7 @@ class TextAnalyzer:
         :return: Количество слогов в слове.
         """
         return len(re.findall(r'[аеёиоуыэюя]', word, re.IGNORECASE))
-    
+
     def get_average_sentence_length(self) -> float:
         """
         Рассчитывает среднюю длину предложения (количество слов в среднем предложении).
@@ -231,7 +233,7 @@ class TextAnalyzer:
         sentences = self.tokenize_sentences()
         count_in_sentences = [len(self.get_words_in_sentence(sentence)) for sentence in sentences]
         return sum(count_in_sentences) / len(sentences) if len(sentences) != 0 else 0
-    
+
     def get_average_word_lenght(self) -> float:
         """
         Рассчитывает среднюю длину слова в тексте.
@@ -241,7 +243,7 @@ class TextAnalyzer:
         words = self.tokenize_words()
         len_words = [len(word) for word in words]
         return sum(len_words) / len(words) if len(words) != 0 else 0
-    
+
     def get_average_syllables_word(self) -> float:
         """
         Рассчитывает среднее количество слогов на слово в тексте.
@@ -251,7 +253,7 @@ class TextAnalyzer:
         words = self.tokenize_words()
         word_syllables_count = [self.get_syllables_count(word) for word in words]
         return sum(word_syllables_count) / len(words) if len(words) != 0 else 0
-        
+
     def get_flesh_index(self) -> float:
         """
         Рассчитывает индекс удобочитаемости Флеша.
@@ -266,7 +268,7 @@ class TextAnalyzer:
         ASL = self.get_average_sentence_length()
         ASW = self.get_average_syllables_word()
         return 206.835 - (1.015 * ASL) - (84.6 * ASW)
-    
+
     def get_bm25_scores(self, query) -> List[Tuple[str, float]]:
         """
         Рассчитывает BM25-оценки предложений по заданному запросу.
@@ -322,7 +324,7 @@ class TextAnalyzer:
     def determine_actfl_level(self) -> str:
         """
         Определяет уровень текста по системе ACTFL с помощью AI (g4f).
-        
+
         :return: Строка с определённым уровнем (например, "Advanced Mid", "Intermediate High" и т.д.).
         """
         try:
@@ -330,81 +332,86 @@ class TextAnalyzer:
             Определи уровень сложности этого русского текста по системе ACTFL. 
             Варианты уровней: "Advanced Mid", "Advanced Low", "Intermediate High", "Intermediate Mid", "Novice High", "Below Novice".
             Ответь только названием уровня, без дополнительных пояснений.
-            
+
             Текст: {' '.join(self.words)}
             """
-            
+
             response = g4f.ChatCompletion.create(
                 model="gpt-4o",
                 provider=Blackbox,
                 messages=[{"role": "user", "content": prompt}],
                 stream=False
             )
-            
+
             # Очищаем и проверяем ответ
             level = response.strip()
             valid_levels = {
                 "Advanced Mid", "Advanced Low", "Intermediate High",
                 "Intermediate Mid", "Novice High", "Below Novice"
             }
-            
+
             if level in valid_levels:
                 return level
             return "Intermediate Mid"
-            
+
         except Exception as e:
             print(f"Error in ACTFL determination: {e}")
-            return "Intermediate Mid" 
+            return "Intermediate Mid"
 
     def actfl_to_cefr(actfl_level: str) -> str:
         """
         Переводит уровень сложности по системе ACTFL в соответствующий уровень по системе CEFR.
-        
+
         :param actfl_level: Уровень ACTFL.
         :return: Соответствующий уровень CEFR
         """
 
         return ACTFL_TO_CEFR.get(actfl_level, None)
 
-    def get_key_words(self) -> List[str]:
+    def get_key_words(self, top_n: int = 10, window_size: int = 2) -> List[str]:
         """
-        Выделяет ключевые слова на основе метрики TF/IDF.
-        Для каждого слова TF рассчитывается по лемматизированному списку (self.normalized_words),
-        а затем его оценка = (TF) / (частота из freq_dict + ε).
-        Слова сортируются по убыванию оценки – чем выше оценка, тем слово характернее для данного текста.
+        Выделяет ключевые слова из текста с использованием алгоритма RAKE.
 
-        :return: Список ключевых слов, отсортированных по значимости.
+        Аргументы:
+          top_n (int): Количество ключевых ключевых фраз для возврата (по умолчанию 10).
+          window_size (int): Не используется в алгоритме RAKE, оставлен для совместимости.
+
+        Возвращает:
+          List[str]: Список ключевых фраз.
         """
-        tf = {}
-        for word in self.normalized_words:
-            tf[word] = tf.get(word, 0) + 1
-        epsilon = 0.1  # корректирующий коэффициент для избежания деления на 0
-        scores = {}
-        for word, count in tf.items():
-            corpus_freq = freq_dict.get(word, epsilon)
-            scores[word] = count / corpus_freq
-        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return [word for word, score in sorted_words]
+        from nlp_rake import Rake
+        # Используем стоп-слова, уже загруженные в self.stop_words
+        stops = list(self.stop_words)
+        # Инициализируем RAKE с ограничением максимального числа слов в фразе до 3
+        rake = Rake(stopwords=stops, max_words=3)
+        # Применяем алгоритм RAKE к исходному тексту
+        key_phrases = rake.apply(self.text)
+        return key_phrases[:top_n]
 
     def get_most_useful_words(self) -> List[str]:
         """
-        Выделяет «самые полезные слова» – те, которых нет в базовых словарях (A1 ∪ A2),
-        и сортирует их по значению TF/IDF (рассчитывается как (TF) / (частота из freq_dict + ε)).
-
-        :return: Список полезных слов, отсортированный по убыванию значимости.
+        Выделяет полезные слова — те, которые отсутствуют в базовых словарях (A1 ∪ A2)
+        и присутствуют в частотном словаре (freq_dict). Для каждого слова вычисляется отношение
+        частоты появления в тексте (TF) к его частоте в freq_dict (TF/IDF), после чего слова
+        сортируются по убыванию этого показателя.
         """
-        basic_vocab = a1.union(a2)
+        # Объединяем базовые словари A1 и A2
+        basic_vocab = a1.union(a2)  # Импорт из cefr_dictionary :contentReference[oaicite:0]{index=0}
+
+        # Вычисляем TF для каждого лемматизированного слова
         tf = {}
         for word in self.normalized_words:
             tf[word] = tf.get(word, 0) + 1
-        epsilon = 0.1
-        scores = {}
+
+        # Отбираем только те слова, которых нет в базовом словаре и которые присутствуют в freq_dict
+        useful_scores = {}
         for word, count in tf.items():
-            if word not in basic_vocab:
-                corpus_freq = freq_dict.get(word, epsilon)
-                scores[word] = count / corpus_freq
-        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return [word for word, score in sorted_words]
+            if word not in basic_vocab and word in freq_dict:  # freq_dict импортирован из freq_dictionary :contentReference[oaicite:1]{index=1}
+                useful_scores[word] = count / freq_dict[word]
+
+        # Сортируем слова по убыванию значения TF/IDF
+        sorted_useful = sorted(useful_scores.items(), key=lambda x: x[1], reverse=True)
+        return [word for word, score in sorted_useful]
 
     def get_full_analysis_text(self) -> str:
         """
@@ -415,7 +422,7 @@ class TextAnalyzer:
         actfl_level = self.determine_actfl_level()
         cefr_level = self.actfl_to_cefr(actfl_level)
         reading_times = self.calculate_reading_time()
-        
+
         lines = [
             f"<b>Уровень текста в системе ACTFL</b> - {actfl_level}",
             f"<b>Уровень текста в системе CEFR</b> - {cefr_level}",
@@ -426,8 +433,8 @@ class TextAnalyzer:
             f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}\n",
             f"<b>Изучающее чтение</b>: {reading_times['study_time']}",
             f"<b>Просмотровое чтение</b>: {reading_times['skim_time']}",
-            ]
-        
+        ]
+
         key_words = self.get_key_words()
         if key_words:
             lines.append("\n<b>Ключевые слова</b>:\n" + ", ".join(key_words))
