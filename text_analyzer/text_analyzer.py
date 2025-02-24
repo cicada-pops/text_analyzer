@@ -515,8 +515,12 @@ class TextAnalyzer:
             f"<b>Знаков с пробелами</b> - {self.character_count}",
             f"<b>Предложений</b> - {self.sentence_count}",
             f"<b>Слов</b> - {self.word_count}",
+            f"<b>Средняя длина предложений</b> - {self.get_average_sentence_length()}",
+            f"<b>Средняя длина слов</b> - {self.get_average_word_lenght()}",
             f"<b>Уникальных слов</b> - {self.get_unique_word_count()}",
-            f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}\n",
+            f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}",
+            f"<b>Индекс LIX</b>: {self.calculate_lix()}",
+            f"<b>Индекс Флэша-Кинкейда</b>: {self.get_flesh_index}\n",
             f"<b>Изучающее чтение</b>: {reading_times['study_time']}",
             f"<b>Просмотровое чтение</b>: {reading_times['skim_time']}",
             ]
@@ -528,6 +532,10 @@ class TextAnalyzer:
         useful_words = self.get_most_useful_words()
         if useful_words:
             lines.append("\n<b>Самые полезные слова</b>:\n" + ", ".join(useful_words))
+        
+        pos_tags = self.count_pos_tags()
+        if pos_tags:
+            lines.append("\n<b>Распределение частей речи</b>:\n" + ", ".join(f"{pos}: {percent}" for pos, percent in pos_tags.items()))
 
         lexical_lists = self.analyze_lexical_lists()
         for level, data in lexical_lists.items():
