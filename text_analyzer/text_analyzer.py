@@ -11,6 +11,7 @@ import networkx as nx
 from nlp_rake import Rake
 import math
 
+os.environ['G4F_SILENCE_WARNINGS'] = 'true'
 nltk_data_path = os.path.expanduser('~/nltk_data')
 flag_file = os.path.join(nltk_data_path, '.resources_downloaded')
 
@@ -360,7 +361,7 @@ class TextAnalyzer:
             """
             
             response = g4f.ChatCompletion.create(
-                model="gpt-4o",
+                model="gemini-1.5-flash",
                 provider=Blackbox,
                 messages=[{"role": "user", "content": prompt}],
                 stream=False
@@ -519,8 +520,8 @@ class TextAnalyzer:
             f"<b>Средняя длина слов</b> - {self.get_average_word_lenght()}",
             f"<b>Уникальных слов</b> - {self.get_unique_word_count()}",
             f"<b>Лексическое разнообразие</b> - {self.get_lexical_diversity()}",
-            f"<b>Индекс LIX</b>: {self.calculate_lix()}",
-            f"<b>Индекс Флэша-Кинкейда</b>: {self.get_flesh_index}\n",
+            f"<b>Индекс LIX</b>: {self.calculate_lix():.2f}",
+            f"<b>Индекс Флэша-Кинкейда</b>: {self.get_flesh_index():.2f}",
             f"<b>Изучающее чтение</b>: {reading_times['study_time']}",
             f"<b>Просмотровое чтение</b>: {reading_times['skim_time']}",
             ]
