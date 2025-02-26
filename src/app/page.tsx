@@ -74,6 +74,13 @@ export default function TextAnalysis() {
     }
   };
 
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    if (newText.length <= 10000) {  // Проверяем длину перед обновлением
+      setText(newText);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
@@ -104,9 +111,12 @@ export default function TextAnalysis() {
                             maxHeight: `${MAX_HEIGHT}px`
                           }}
                           value={text}
-                          onChange={(e) => setText(e.target.value)}
+                          onChange={handleTextChange}
+                          maxLength={10000}
                         />
-                        <div className="absolute bottom-6 right-6 text-sm text-gray-500">
+                        <div className={`absolute bottom-6 right-6 text-sm ${
+                          text.length >= 10000 ? 'text-red-500' : 'text-gray-500'
+                        }`}>
                           {text.length} / 10000
                         </div>
                       </div>
